@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <title>DailyDoseofBCA</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        :root {
+            --bg-base: #000000;
+            --accent-blue: #007aff;
+            --glass-bg: rgba(255, 255, 255, 0.04);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --liquid-blur: blur(40px);
+        }
+
+        body {
+            background-color: var(--bg-base);
+            color: #ffffff;
+            height: 100dvh;
+            width: 100vw;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", system-ui;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            z-index: 0;
+            opacity: 0.2;
+            pointer-events: none;
+        }
+
+        .liquid-glass {
+            background: var(--glass-bg);
+            backdrop-filter: var(--liquid-blur);
+            -webkit-backdrop-filter: var(--liquid-blur);
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.5);
+        }
+
+        .view {
+            position: fixed;
+            inset: 0;
+            display: none;
+            flex-direction: column;
+            z-index: 10;
+            background: black;
+        }
+
+        .view.active {
+            display: flex;
+        }
+
+        .ios-input {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid var(--glass-border);
+            border-radius: 14px;
+            padding: 12px;
+            color: white;
+            font-size: 15px;
+            outline: none;
+            transition: all 0.3s cubic-bezier(0.2, 1, 0.3, 1);
+        }
+
+        .ios-input:focus {
+            border-color: var(--accent-blue);
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .ios-btn {
+            width: 100%;
+            background: var(--accent-blue);
+            color: white;
+            border-radius: 14px;
+            padding: 14px;
+            font-weight: 700;
+            font-size: 15px;
+            transition: all 0.4s cubic-bezier(0.2, 1, 0.3, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .ios-btn:active {
+            transform: scale(0.97);
+            opacity: 0.9;
+        }
+
+        .slider-viewport {
+            position: relative;
+            overflow: hidden;
+            width: 100%;
+            touch-action: none;
+        }
+
+        .slider-track {
+            display: flex;
+            height: 100%;
+            will-change: transform;
+        }
+
+        .slide {
+            width: 100vw;
+            padding: 0 16px;
+            flex-shrink: 0;
+        }
+
+        .slide-content {
+            padding-bottom: 100px;
+        }
+
+        .card-minimal {
+            border-radius: 24px;
+            padding: 20px;
+            height: auto;
+        }
+
+        /* Card Lift-Up Effect */
+        .card-lift {
+            transition: transform 0.4s cubic-bezier(0.2, 1, 0.3, 1), box-shadow 0.4s ease;
+        }
+
+        .card-lift:active {
+            transform: scale(1.02) translateY(-8px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.8);
+            filter: brightness(1.1);
+        }
+
+        /* Nav Container Interactive State */
+        nav {
+            transition: transform 0.3s cubic-bezier(0.2, 1, 0.3, 1);
+        }
+
+        nav:active {
+            transform: scale(0.98);
+            /* Subtle press effect on whole bar */
+        }
+
+        .nav-lift {
+            transform: translateY(-8px);
+        }
+
+        /* Indicator Drag Styling */
+        #nav-indicator {
+            background: rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.1);
+            transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1), background 0.3s ease;
+            will-change: transform;
+        }
+
+        /* Dragging state for indicator */
+        .indicator-active #nav-indicator {
+            transform: scale(1.05) translateY(-4px);
+            /* Lift-up feel during drag */
+            background: rgba(255, 255, 255, 0.18);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
+            transition: none;
+            /* Instant tracking during drag */
+        }
+
+        .spinner {
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 0.8s linear infinite;
+            display: none;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .loading .spinner {
+            display: block;
+        }
+
+        .loading .btn-text {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="orb w-[200px] h-[200px] bg-blue-600 top-[-60px] right-[-30px]"></div>
+    <div class="orb w-[180px] h-[180px] bg-purple-600 bottom-[-30px] left-[-30px]"></div>
+
+    <!-- LOADING VIEW (Visible by Default) -->
+    <div id="view-loading" class="view active items-center justify-center p-6 bg-black z-50">
+        <div class="spinner border-t-blue-500 w-8 h-8"></div>
+    </div>
+
+
+
+    <!-- HOME VIEW -->
+    <div id="view-home" class="view">
+        <header class="pt-12 px-6 pb-2 flex justify-between items-end relative z-20">
+            <div>
+                <h2 class="text-xs font-black text-blue-500 uppercase tracking-widest mb-0.5">Semester 5</h2>
+                <h1 id="user-display-name" class="text-2xl font-black tracking-tighter">Student</h1>
+            </div>
+            <button onclick="toggleProfile()" class="active:scale-90 transition-transform">
+                <img id="header-avatar" src="" class="w-10 h-10 rounded-xl liquid-glass object-cover bg-zinc-900">
+            </button>
+        </header>
+
+        <div class="slider-viewport flex-1 mt-3" id="slider-viewport">
+            <div class="slider-track" id="slider-track">
+
+                <div class="slide">
+                    <div class="slide-content h-full overflow-y-auto">
+                        <h3 class="text-xs font-black text-zinc-600 uppercase tracking-[0.2em] mb-3 text-center">Notes
+                        </h3>
+                        <div class="space-y-3">
+                            <div class="liquid-glass card-minimal card-lift border-white/5">
+                                <div
+                                    class="w-10 h-10 bg-blue-500/10 text-blue-500 rounded-xl flex items-center justify-center mb-4">
+                                    <i data-lucide="globe" size="20"></i>
+                                </div>
+                                <h4 class="text-lg font-bold mb-1">Advanced Web Technologies</h4>
+                                <p class="text-zinc-500 text-[10px] leading-relaxed mb-6">React, Node.js, and modern web
+                                    frameworks.</p>
+                                <a href="https://drive.google.com/file/d/1eqbwVfpe7OvzrVSnUq_1b732fFSEGnXT/view?usp=sharing"
+                                    target="_blank"
+                                    class="w-full py-2.5 bg-white text-black rounded-xl font-black text-[10px] text-center block">View
+                                    PDF</a>
+                            </div>
+                            <div class="liquid-glass card-minimal card-lift border-white/5">
+                                <div
+                                    class="w-10 h-10 bg-blue-500/10 text-blue-500 rounded-xl flex items-center justify-center mb-4">
+                                    <i data-lucide="smartphone" size="20"></i>
+                                </div>
+                                <h4 class="text-lg font-bold mb-1">Mobile Application Development</h4>
+                                <p class="text-zinc-500 text-[10px] leading-relaxed mb-6">Android and iOS app
+                                    development.</p>
+                                <a href="https://drive.google.com/file/d/1K-XtFALhVbERRb4TybfZmuRdswTmL7bG/view?usp=sharing"
+                                    target="_blank"
+                                    class="w-full py-2.5 bg-white text-black rounded-xl font-black text-[10px] text-center block">View
+                                    PDF</a>
+                            </div>
+                            <div class="liquid-glass card-minimal card-lift border-white/5">
+                                <div
+                                    class="w-10 h-10 bg-blue-500/10 text-blue-500 rounded-xl flex items-center justify-center mb-4">
+                                    <i data-lucide="cloud" size="20"></i>
+                                </div>
+                                <h4 class="text-lg font-bold mb-1">Cloud Computing</h4>
+                                <p class="text-zinc-500 text-[10px] leading-relaxed mb-6">AWS, Azure, and cloud
+                                    services.</p>
+                                <a href="https://drive.google.com/file/d/1YO_-FEzv9xf_KgwBtr_M3q4gKd_2nqaz/view?usp=sharing"
+                                    target="_blank"
+                                    class="w-full py-2.5 bg-white text-black rounded-xl font-black text-[10px] text-center block">View
+                                    PDF</a>
+                            </div>
+                            <div class="liquid-glass card-minimal card-lift border-white/5">
+                                <div
+                                    class="w-10 h-10 bg-blue-500/10 text-blue-500 rounded-xl flex items-center justify-center mb-4">
+                                    <i data-lucide="bar-chart-3" size="20"></i>
+                                </div>
+                                <h4 class="text-lg font-bold mb-1">Data Analytics</h4>
+                                <p class="text-zinc-500 text-[10px] leading-relaxed mb-6">Data mining, visualization,
+                                    and analytics tools.</p>
+                                <a href="https://drive.google.com/file/d/1bBNn016vo-gj9mf_7p-CMZaZEP7BV-cD/view?usp=sharing"
+                                    target="_blank"
+                                    class="w-full py-2.5 bg-white text-black rounded-xl font-black text-[10px] text-center block">View
+                                    PDF</a>
+                            </div>
+                            <div class="liquid-glass card-minimal card-lift border-white/5">
+                                <div
+                                    class="w-10 h-10 bg-blue-500/10 text-blue-500 rounded-xl flex items-center justify-center mb-4">
+                                    <i data-lucide="clipboard-check" size="20"></i>
+                                </div>
+                                <h4 class="text-lg font-bold mb-1">Project Management</h4>
+                                <p class="text-zinc-500 text-[10px] leading-relaxed mb-6">Agile, Scrum, and project
+                                    planning.</p>
+                                <a href="https://drive.google.com/file/d/1sTi59Twjk9nyB9n5xlv9JMeWWmH0CFVB/view?usp=sharing"
+                                    target="_blank"
+                                    class="w-full py-2.5 bg-white text-black rounded-xl font-black text-[10px] text-center block">View
+                                    PDF</a>
+                            </div>
+                            <div class="liquid-glass card-minimal card-lift border-white/5">
+                                <div
+                                    class="w-10 h-10 bg-blue-500/10 text-blue-500 rounded-xl flex items-center justify-center mb-4">
+                                    <i data-lucide="brain" size="20"></i>
+                                </div>
+                                <h4 class="text-lg font-bold mb-1">Artificial Intelligence</h4>
+                                <p class="text-zinc-500 text-[10px] leading-relaxed mb-6">Machine learning and AI
+                                    fundamentals.</p>
+                                <a href="https://drive.google.com/file/d/1YhwWJa5rIz2OfO4gp9ZyNkBv94Wm7xmp/view?usp=sharing"
+                                    target="_blank"
+                                    class="w-full py-2.5 bg-white text-black rounded-xl font-black text-[10px] text-center block">View
+                                    PDF</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="slide">
+                    <div class="slide-content h-full overflow-y-auto">
+                        <h3 class="text-[9px] font-black text-zinc-600 uppercase tracking-[0.2em] mb-3 text-center">
+                            Assignments</h3>
+                        <div class="space-y-3">
+                            <div class="liquid-glass card-minimal card-lift border-purple-500/20">
+                                <div
+                                    class="w-10 h-10 bg-purple-500/10 text-purple-500 rounded-xl flex items-center justify-center mb-4">
+                                    <i data-lucide="calendar" size="20"></i>
+                                </div>
+                                <h4 class="text-lg font-bold mb-1">Sorted by Date</h4>
+                                <p class="text-zinc-500 text-[10px] leading-relaxed mb-6">View assignments organized by
+                                    date</p>
+                                <a href="dateassi.html"
+                                    class="w-full py-2.5 bg-zinc-800 text-white rounded-xl font-black text-[10px] border border-white/10 text-center block">View</a>
+                            </div>
+                            <div class="liquid-glass card-minimal card-lift border-purple-500/20">
+                                <div
+                                    class="w-10 h-10 bg-purple-500/10 text-purple-500 rounded-xl flex items-center justify-center mb-4">
+                                    <i data-lucide="book" size="20"></i>
+                                </div>
+                                <h4 class="text-lg font-bold mb-1">Sorted by Subject</h4>
+                                <p class="text-zinc-500 text-[10px] leading-relaxed mb-6">View assignments organized by
+                                    subject</p>
+                                <a href="subassi.html"
+                                    class="w-full py-2.5 bg-zinc-800 text-white rounded-xl font-black text-[10px] border border-white/10 text-center block">View</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="slide">
+                    <div class="slide-content h-full overflow-y-auto">
+                        <h3 class="text-[9px] font-black text-zinc-600 uppercase tracking-[0.2em] mb-3 text-center">
+                            Records</h3>
+                        <div class="space-y-3">
+                            <div class="liquid-glass card-minimal card-lift border-emerald-500/20">
+                                <div
+                                    class="w-10 h-10 bg-emerald-500/10 text-emerald-500 rounded-xl flex items-center justify-center mb-4">
+                                    <i data-lucide="briefcase" size="20"></i>
+                                </div>
+                                <h4 class="text-lg font-bold mb-1">Placement Reg</h4>
+                                <p class="text-zinc-500 text-[10px] leading-relaxed mb-6">Status of company
+                                    registrations.</p>
+                                <button
+                                    class="w-full py-2.5 bg-zinc-800 text-white rounded-xl font-black text-[10px] border border-white/10">Access</button>
+                            </div>
+                            <div class="liquid-glass card-minimal card-lift border-emerald-500/20">
+                                <div
+                                    class="w-10 h-10 bg-emerald-500/10 text-emerald-500 rounded-xl flex items-center justify-center mb-4">
+                                    <i data-lucide="mic" size="20"></i>
+                                </div>
+                                <h4 class="text-lg font-bold mb-1">Mock Interviews</h4>
+                                <p class="text-zinc-500 text-[10px] leading-relaxed mb-6">Scores and feedback from mock
+                                    interviews.</p>
+                                <button
+                                    class="w-full py-2.5 bg-zinc-800 text-white rounded-xl font-black text-[10px] border border-white/10">Access</button>
+                            </div>
+                            <div class="liquid-glass card-minimal card-lift border-emerald-500/20">
+                                <div
+                                    class="w-10 h-10 bg-emerald-500/10 text-emerald-500 rounded-xl flex items-center justify-center mb-4">
+                                    <i data-lucide="file-text" size="20"></i>
+                                </div>
+                                <h4 class="text-lg font-bold mb-1">Seminar Report</h4>
+                                <p class="text-zinc-500 text-[10px] leading-relaxed mb-6">Technical seminar presentation
+                                    report.</p>
+                                <button
+                                    class="w-full py-2.5 bg-zinc-800 text-white rounded-xl font-black text-[10px] border border-white/10">Access</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Interactive Bottom Bar -->
+        <div class="fixed bottom-8 left-0 w-full px-5 z-30 flex justify-between items-center">
+            <nav id="bottom-nav"
+                class="liquid-glass w-full max-w-[320px] mx-auto h-14 rounded-[22px] flex items-center p-1 relative overflow-visible cursor-grab active:cursor-grabbing">
+                <div id="nav-indicator" class="absolute h-[calc(100%-8px)] w-[calc((100%-8px)/3)] rounded-[18px] z-0">
+                </div>
+
+                <div class="flex-1 h-full flex flex-col items-center justify-center z-10" onclick="jumpToSlide(0)">
+                    <i data-lucide="book-open" size="16"></i>
+                    <span class="text-xs mt-1">Notes</span>
+                </div>
+                <div class="flex-1 h-full flex flex-col items-center justify-center z-10 opacity-40"
+                    onclick="jumpToSlide(1)">
+                    <i data-lucide="clipboard-list" size="16"></i>
+                    <span class="text-xs mt-1">Assignments</span>
+                </div>
+                <div class="flex-1 h-full flex flex-col items-center justify-center z-10 opacity-40"
+                    onclick="jumpToSlide(2)">
+                    <i data-lucide="database" size="16"></i>
+                    <span class="text-xs mt-1">Records</span>
+                </div>
+            </nav>
+            <button onclick="toggleSemesterMenu()"
+                class="liquid-glass w-14 h-14 rounded-[22px] flex items-center justify-center active:scale-90 transition-transform">
+                <i data-lucide="list" size="16"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- PROFILE MODAL -->
+    <div id="profile-modal"
+        class="hidden fixed inset-0 z-[100] bg-black/80 backdrop-blur-xl flex items-end justify-center"
+        onclick="toggleProfile()">
+        <div class="w-full liquid-glass rounded-t-[32px] p-6 animate-slide-up" onclick="event.stopPropagation()">
+            <div class="w-8 h-1 bg-white/10 rounded-full mx-auto mb-6"></div>
+            <div class="flex items-center gap-4 mb-8">
+                <img id="modal-avatar" src=""
+                    class="w-14 h-14 rounded-2xl object-cover border border-blue-500/30 bg-zinc-900">
+                <div>
+                    <h3 id="profile-name-label" class="text-lg font-bold">User</h3>
+                    <p id="profile-email-label" class="text-zinc-500 text-[10px]">user@email.com</p>
+                </div>
+            </div>
+            <div class="space-y-2.5">
+                <div class="flex gap-2">
+                    <input type="text" id="new-name" class="ios-input flex-1" placeholder="Rename">
+                    <button id="btn-update-name"
+                        class="bg-white text-black px-5 rounded-xl font-bold text-[11px]">Save</button>
+                </div>
+                <button onclick="handleSignOut()"
+                    class="w-full py-3 bg-red-500/10 text-red-500 rounded-xl font-bold text-[11px]">Sign Out</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SEMESTER MENU -->
+    <div id="semester-menu"
+        class="hidden fixed bottom-0 left-0 w-full h-full z-[110] bg-black/80 backdrop-blur-xl flex items-end justify-center"
+        onclick="toggleSemesterMenu()">
+        <div class="w-full liquid-glass rounded-t-[32px] p-6 animate-slide-up" onclick="event.stopPropagation()">
+            <div class="w-8 h-1 bg-white/10 rounded-full mx-auto mb-6"></div>
+            <h3 class="text-lg font-bold mb-6 text-center">Select Semester</h3>
+            <div class="space-y-3">
+                <button onclick="navigateTo('sem1.html')"
+                    class="w-full py-3 bg-zinc-800 text-white rounded-xl font-bold text-[11px] text-center block">Semester
+                    1</button>
+                <button onclick="navigateTo('sem2.html')"
+                    class="w-full py-3 bg-zinc-800 text-white rounded-xl font-bold text-[11px] text-center block">Semester
+                    2</button>
+                <button onclick="navigateTo('sem3.html')"
+                    class="w-full py-3 bg-zinc-800 text-white rounded-xl font-bold text-[11px] text-center block">Semester
+                    3</button>
+                <button onclick="navigateTo('sem4.html')"
+                    class="w-full py-3 bg-zinc-800 text-white rounded-xl font-bold text-[11px] text-center block">Semester
+                    4</button>
+                <button onclick="navigateTo('sem5.html')"
+                    class="w-full py-3 bg-zinc-800 text-white rounded-xl font-bold text-[11px] text-center block">Semester
+                    5</button>
+                <button onclick="navigateTo('sem6.html')"
+                    class="w-full py-3 bg-zinc-800 text-white rounded-xl font-bold text-[11px] text-center block">Semester
+                    6</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+        const SB_URL = 'https://nsvkbxssnjjwhsrsxirs.supabase.co';
+        const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5zdmtieHNzbmpqd2hzcnN4aXJzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY0MDA4NzksImV4cCI6MjA4MTk3Njg3OX0.S5GgEm49x6nJFmnOSsFI3Nte-mwNmVUbwTkxqa8h3yE';
+        const _supabase = supabase.createClient(SB_URL, SB_KEY);
+
+        const views = {
+            loading: document.getElementById('view-loading'),
+            home: document.getElementById('view-home')
+        };
+
+        // --- SLIDER LOGIC ---
+        let currentSlide = 0;
+        const sliderTrack = document.getElementById('slider-track');
+        const navIndicator = document.getElementById('nav-indicator');
+        const navItems = document.querySelectorAll('#bottom-nav > div.flex-1');
+
+        function jumpToSlide(index) {
+            currentSlide = index;
+            const width = document.getElementById('slider-viewport').clientWidth;
+            sliderTrack.style.transform = `translateX(-${index * width}px)`;
+
+            navItems.forEach((item, i) => {
+                item.classList.toggle('opacity-40', i !== index);
+            });
+            navIndicator.style.transform = `translateX(${index * 100}%)`;
+        }
+
+        // Touch Drag Logic
+        let startX = 0;
+        let isDragging = false;
+
+        sliderTrack.addEventListener('touchstart', (e) => {
+            startX = e.touches[0].clientX;
+            isDragging = true;
+            sliderTrack.style.transition = 'none';
+        });
+
+        sliderTrack.addEventListener('touchmove', (e) => {
+            if (!isDragging) return;
+            const currentX = e.touches[0].clientX;
+            const diff = startX - currentX;
+            const width = document.getElementById('slider-viewport').clientWidth;
+
+            // Resistance at edges
+            if ((currentSlide === 0 && diff < 0) || (currentSlide === 2 && diff > 0)) return;
+
+            const translateX = -(currentSlide * width) - diff;
+            sliderTrack.style.transform = `translateX(${translateX}px)`;
+        });
+
+        sliderTrack.addEventListener('touchend', (e) => {
+            isDragging = false;
+            sliderTrack.style.transition = 'transform 0.3s cubic-bezier(0.2, 1, 0.3, 1)';
+            const endX = e.changedTouches[0].clientX;
+            const diff = startX - endX;
+
+            if (Math.abs(diff) > 50) {
+                if (diff > 0 && currentSlide < 2) currentSlide++;
+                else if (diff < 0 && currentSlide > 0) currentSlide--;
+            }
+            jumpToSlide(currentSlide);
+        });
+
+
+        const initialHash = window.location.hash;
+
+        // Manual Session Recovery from Hash
+        if (initialHash && initialHash.includes('access_token')) {
+            const params = new URLSearchParams(initialHash.substring(1));
+            const access_token = params.get('access_token');
+            const refresh_token = params.get('refresh_token');
+            if (access_token && refresh_token) {
+                _supabase.auth.setSession({ access_token, refresh_token });
+            }
+        }
+
+        _supabase.auth.onAuthStateChange(async (event, session) => {
+            if (session) {
+                const user = session.user;
+                const meta = user.user_metadata || {};
+                const userName = meta.full_name || "Student";
+
+                // DATA CLEANUP
+                if (window.location.hash && window.location.hash.includes('access_token')) {
+                    window.history.replaceState(null, '', window.location.pathname);
+                }
+
+                setView('home');
+                const avatar = meta.avatar_url || `https://ui-avatars.com/api/?name=${userName}&background=0a84ff&color=fff`;
+                document.getElementById('user-display-name').innerText = userName;
+                document.getElementById('profile-name-label').innerText = userName;
+                document.getElementById('profile-email-label').innerText = user.email;
+                document.getElementById('header-avatar').src = avatar;
+                document.getElementById('modal-avatar').src = avatar;
+                jumpToSlide(0);
+            } else {
+                if (initialHash && initialHash.includes('access_token')) return;
+                window.location.href = 'index.html';
+            }
+        });
+
+        function setView(target) {
+            Object.values(views).forEach(v => v.classList.remove('active'));
+            views[target].classList.add('active');
+        }
+
+        function toggleProfile() {
+            document.getElementById('profile-modal').classList.toggle('hidden');
+        }
+
+        function toggleSemesterMenu() {
+            document.getElementById('semester-menu').classList.toggle('hidden');
+        }
+
+        async function handleSignOut() {
+            await _supabase.auth.signOut();
+            window.location.href = 'index.html';
+        }
+
+        async function navigateTo(target) {
+            const { data: { session } } = await _supabase.auth.getSession();
+            if (session) {
+                const hash = `access_token=${session.access_token}&refresh_token=${session.refresh_token}`;
+                window.location.href = `${target}#${hash}`;
+            } else {
+                window.location.href = target;
+            }
+        }
+
+        window.addEventListener('resize', () => jumpToSlide(currentSlide));
+    </script>
+</body>
+
+</html>
